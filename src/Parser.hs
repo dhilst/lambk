@@ -8,7 +8,6 @@ import Lambk
 
 newtype Parser a = Parser { runParser :: String -> Maybe (String, a) }
 
-
 instance Functor Parser where
   fmap f (Parser p) = Parser $ \input -> do
     (input', x) <- p input
@@ -57,6 +56,24 @@ pRpar = parseChar ')'
 pLamb = parseChar 'λ'
 pDot = parseChar '.'
 pVar = oneOfChar ['x'..'z']
+pWs = parseChar ' '
+
+parseTerm :: Parser Term
+parseTerm = parseVar <|> parseLambda <|> parseApp
+
+parseApp :: Parser Term
+parseApp = Parser $ \input -> do
+  (input1, _) <- runParser pLpar input
+  (input2, t1) <- runParser parseTerm input1
+  (input3, _) <- runParser pWs input2
+  (input4, t2) <- runParser parseTerm input3
+  (input5, _) <- runParser pRpar input4
+  return (input5, App t1 t2)
+
+parseVar :: Parser Term
+parseVar = Parser $ \input -> do
+  (input', x) <- runParser pVar input
+  return (input', Var [x])
 
 parseLambda :: Parser Term
 parseLambda = Parser $ \input -> do
@@ -64,7 +81,12 @@ parseLambda = Parser $ \input -> do
   (input2, _) <- runParser pLamb input1
   (input3, v) <- runParser pVar input2
   (input4, _) <- runParser pDot input3
-  (input5, body) <- runParser pVar input4
+  (input5, body) <- runParser parseTerm input4
   (input6, _) <- runParser pRpar input5
-  return (input6, Lamb [v] (Var [body]))
+  return (input6, Lamb [v] body)
 
+
+parse :: String -> Term
+parse input = case runParser parseTerm input of
+  Just (_, t) -> t
+  _ -> error "Parse error"

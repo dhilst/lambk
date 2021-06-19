@@ -16,6 +16,7 @@ data Term
   | FVar String
   | Lamb String Term
   | App Term Term
+  deriving (Eq)
 
 
 instance Show Term where
