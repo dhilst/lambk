@@ -23,6 +23,7 @@ executable lambk
 library
   exposed-modules:
     Lambk
+    Kont
     Parser
   hs-source-dirs:
     src
