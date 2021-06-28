@@ -1,5 +1,6 @@
 module Main where
 
+import Kont
 import Lambk
 import Parser
 import Test.Hspec
@@ -32,7 +33,21 @@ evalTest =
         let result = show . eval . parse $ "((λx.(x z)) y)"
          in result `shouldBe` "(y z)"
 
+cekEvalTest :: IO ()
+cekEvalTest =
+  hspec $ do
+    describe "CEK Beta reduction" $ do
+      it "((λx.(x x)) y) => (y y)" $ do
+        let result = show . eval . parse $ "((λx.(x x)) y)"
+         in result `shouldBe` "(y y)"
+      it "((λx.(x z)) y) => (y z)" $ do
+        let result = show . eval . parse $ "((λx.(x z)) y)"
+         in result `shouldBe` "(y z)"
+  where
+    eval = cekEval
+
 main :: IO ()
 main = do
   parserTest
   evalTest
+  cekEvalTest
