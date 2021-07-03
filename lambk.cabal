@@ -23,7 +23,6 @@ executable lambk
 library
   exposed-modules:
     Lamb
-    Eval
     CEK
     Parser
   hs-source-dirs:

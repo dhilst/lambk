@@ -1,9 +1,15 @@
 module Main where
 
 import CEK
-import Eval
+import Lamb
 import Parser
 import Test.Hspec
+
+consumeAllInputTest :: IO ()
+consumeAllInputTest =
+  hspec $ do
+    describe "Parses all input" $ do
+      it "(λx.x)" $ do parse "(λx.x)" `shouldBe` Lamb "x" (Var "x")
 
 parserTest :: IO ()
 parserTest =
@@ -22,21 +28,6 @@ parserTest =
         let result = show . parse $ "((λx.x) y)"
          in result `shouldBe` "((λx.x) y)"
 
-evalTest :: IO ()
-evalTest =
-  hspec $ do
-    describe "Beta reduction" $ do
-      it "((λx.(x x)) y) ->* (y y)" $ do
-        let result = show . eval . parse $ "((λx.(x x)) y)"
-         in result `shouldBe` "(y y)"
-      it "((λx.(x z)) y) ->* (y z)" $ do
-        let result = show . eval . parse $ "((λx.(x z)) y)"
-         in result `shouldBe` "(y z)"
-      it "..." $ do
-      
-        let result = show . eval . parse $ "(((λx.x) (λx.x)) y)"
-         in result `shouldBe` "y"
-
 cekEvalTest :: IO ()
 cekEvalTest =
   hspec $ do
@@ -44,9 +35,18 @@ cekEvalTest =
       it "((λx.x) (λy.y)) ->* (λy.y)" $ do
         let result = show . cekEval . parse $ "((λx.x) (λy.y))"
          in result `shouldBe` "(λy.y)"
+      it "((λx.x) true) ->* true" $ do
+        let result = show . cekEval . parse $ "((λx.x) true)"
+         in result `shouldBe` "true"
+      it "((λx.x) false) ->* false" $ do
+        let result = show . cekEval . parse $ "((λx.x) false)"
+         in result `shouldBe` "false"
+      it "((λx.x) ()) ->* ()" $ do
+        let result = show . cekEval . parse $ "((λx.x) ())"
+         in result `shouldBe` "()"
 
 main :: IO ()
 main = do
+  consumeAllInputTest
   parserTest
-  evalTest
   cekEvalTest

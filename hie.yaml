@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./app/Main.hs"
+      component: "lambk:exe:lambk"
+
+    - path: "./src"
+      component: "lambk:lib"
+
+    - path: "./test"
+      component: "lambk:test:lambk-test"

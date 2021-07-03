@@ -58,8 +58,19 @@ pDot = parseChar '.'
 pVar = oneOfChar ['x'..'z']
 pWs = parseChar ' '
 
+parseBool :: String -> Bool -> Parser Bool
+parseBool s v = Parser $ \input -> do
+  (input', x) <- runParser (parseString s) input
+  return (input', v)
+
+parseTrue :: Parser Bool
+parseTrue = parseBool "true" True
+
+parseFalse :: Parser Bool
+parseFalse = parseBool "false" False
+
 parseTerm :: Parser Term
-parseTerm = parseVar <|> parseLambda <|> parseApp
+parseTerm = parseVar <|> parseUnit <|> parseTBool <|> parseLambda <|> parseApp
 
 parseApp :: Parser Term
 parseApp = Parser $ \input -> do
@@ -69,6 +80,16 @@ parseApp = Parser $ \input -> do
   (input4, t2) <- runParser parseTerm input3
   (input5, _) <- runParser pRpar input4
   return (input5, App t1 t2)
+
+parseUnit :: Parser Term
+parseUnit = Parser $ \input -> do
+  (input', _) <- runParser (parseString "()") input
+  return (input', TUnit)
+
+parseTBool :: Parser Term
+parseTBool = Parser $ \input -> do
+  (input', x) <- runParser (parseTrue <|> parseFalse) input
+  return (input', TBool x)
 
 parseVar :: Parser Term
 parseVar = Parser $ \input -> do
@@ -85,8 +106,9 @@ parseLambda = Parser $ \input -> do
   (input6, _) <- runParser pRpar input5
   return (input6, Lamb [v] body)
 
-
 parse :: String -> Term
 parse input = case runParser parseTerm input of
-  Just (_, t) -> t
+  Just (input', t) -> if "" == input'
+    then t 
+    else error $ "Doesnt consume all input >" ++ input' ++ "<"
   _ -> error "Parse error"
