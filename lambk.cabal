@@ -22,8 +22,9 @@ executable lambk
 
 library
   exposed-modules:
-    Lambk
-    Kont
+    Lamb
+    Eval
+    CEK
     Parser
   hs-source-dirs:
     src

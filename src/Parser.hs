@@ -3,7 +3,7 @@ module Parser where
 
 import Control.Monad
 import Control.Applicative
-import Lambk
+import Lamb
 {-# ANN module ("hlint: ignore Use <$>") #-}
 
 newtype Parser a = Parser { runParser :: String -> Maybe (String, a) }

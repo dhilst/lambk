@@ -1,6 +1,6 @@
 module Main where
 
-import Kont
+import CEK
 import Parser
 
 main :: IO ()
