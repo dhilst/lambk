@@ -27,6 +27,9 @@ parserTest =
       it "Should parse app term" $ do
         let result = show . parse $ "((λx.x) y)"
          in result `shouldBe` "((λx.x) y)"
+      it "Should parse bool op" $ do
+        let result = show (runParser parseBoolBinOp "true||true")
+         in result `shouldBe` "((λx.x) y)"
 
 cekEvalTest :: IO ()
 cekEvalTest =

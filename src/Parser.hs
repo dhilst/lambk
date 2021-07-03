@@ -1,67 +1,86 @@
 {-# LANGUAGE LambdaCase #-}
+
 module Parser where
 
-import Control.Monad
 import Control.Applicative
+import Control.Monad
+import Debug.Trace
 import Lamb
+
 {-# ANN module ("hlint: ignore Use <$>") #-}
 
-newtype Parser a = Parser { runParser :: String -> Maybe (String, a) }
+newtype Parser a =
+  Parser
+    { runParser :: String -> Maybe (String, a)
+    }
 
 instance Functor Parser where
-  fmap f (Parser p) = Parser $ \input -> do
-    (input', x) <- p input
-    Just (input', f x)
+  fmap f (Parser p) =
+    Parser $ \input -> do
+      (input', x) <- p input
+      Just (input', f x)
 
 instance Applicative Parser where
   pure x = Parser $ \input -> Just (input, x)
-  (<*>) (Parser p1) (Parser p2) = Parser $ \input -> do
-    (input', f) <- p1 input
-    (input'', a) <- p2 input'
-    return (input'', f a)
+  (<*>) (Parser p1) (Parser p2) =
+    Parser $ \input -> do
+      (input', f) <- p1 input
+      (input'', a) <- p2 input'
+      return (input'', f a)
 
 instance Alternative Parser where
   empty = Parser $ const Nothing
   Parser p1 <|> Parser p2 = Parser $ \input -> p1 input <|> p2 input
 
-
 instance Monad Parser where
   return = pure
-  (Parser p) >>= f = Parser $ \input -> do
-    (input', x) <- p input
-    runParser (f x) input'
+  (Parser p) >>= f =
+    Parser $ \input -> do
+      (input', x) <- p input
+      runParser (f x) input'
 
 parseChar :: Char -> Parser Char
-parseChar x = Parser $ \case
-  (y:ys) | x == y -> Just (ys, x)
-  _ -> Nothing
-
+parseChar x =
+  Parser $ \case
+    (y:ys)
+      | x == y -> Just (ys, x)
+    _ -> Nothing
 
 parseString :: String -> Parser String
-parseString s = let x = map parseChar s
-  in sequenceA x
+parseString s =
+  let x = map parseChar s
+   in sequenceA x
 
 firstOf :: [Parser a] -> Parser a
-firstOf parsers = Parser $ \input -> case parsers of
-  (p:ps) -> case runParser p input of
-    Just x -> Just x
-    Nothing -> runParser (firstOf ps) input
-  _ -> Nothing
+firstOf parsers =
+  Parser $ \input ->
+    case parsers of
+      (p:ps) ->
+        case runParser p input of
+          Just x -> Just x
+          Nothing -> runParser (firstOf ps) input
+      _ -> Nothing
 
 oneOfChar :: [Char] -> Parser Char
 oneOfChar options = firstOf (map parseChar options)
 
 pLpar = parseChar '('
+
 pRpar = parseChar ')'
+
 pLamb = parseChar 'λ'
+
 pDot = parseChar '.'
-pVar = oneOfChar ['x'..'z']
+
+pVar = oneOfChar ['x' .. 'z']
+
 pWs = parseChar ' '
 
 parseBool :: String -> Bool -> Parser Bool
-parseBool s v = Parser $ \input -> do
-  (input', x) <- runParser (parseString s) input
-  return (input', v)
+parseBool s v =
+  Parser $ \input -> do
+    (input', x) <- runParser (parseString s) input
+    return (input', v)
 
 parseTrue :: Parser Bool
 parseTrue = parseBool "true" True
@@ -69,46 +88,80 @@ parseTrue = parseBool "true" True
 parseFalse :: Parser Bool
 parseFalse = parseBool "false" False
 
+parseAnd :: Parser BoolOp
+parseAnd =
+  Parser $ \input -> do
+    (input1, _) <- runParser (parseString "&&") input
+    return (input1, And)
+
+parseOr =
+  Parser $ \input -> do
+    (input1, _) <- runParser (parseString "||") input
+    return (input1, Or)
+
+parseBoolOp :: Parser BoolOp
+parseBoolOp = trace "bool op" $ parseAnd <|> parseOr
+
+parseBoolBinOp :: Parser Term
+parseBoolBinOp =
+  trace
+    "foo"
+    (Parser $ \input -> do
+       (input1, x1) <- runParser parseTerm input
+       (input2, x2) <- runParser parseBoolOp input1
+       (input3, x3) <- runParser parseTerm input2
+       return (input3, TBoolOp x1 x2 x3))
+
 parseTerm :: Parser Term
-parseTerm = parseVar <|> parseUnit <|> parseTBool <|> parseLambda <|> parseApp
+parseTerm =
+  parseVar <|> parseUnit <|> parseBoolBinOp <|> parseTBool <|> parseLambda <|>
+  parseApp
 
 parseApp :: Parser Term
-parseApp = Parser $ \input -> do
-  (input1, _) <- runParser pLpar input
-  (input2, t1) <- runParser parseTerm input1
-  (input3, _) <- runParser pWs input2
-  (input4, t2) <- runParser parseTerm input3
-  (input5, _) <- runParser pRpar input4
-  return (input5, App t1 t2)
+parseApp =
+  Parser $ \input -> do
+    (input1, _) <- runParser pLpar input
+    (input2, t1) <- runParser parseTerm input1
+    (input3, _) <- runParser pWs input2
+    (input4, t2) <- runParser parseTerm input3
+    (input5, _) <- runParser pRpar input4
+    return (input5, App t1 t2)
 
 parseUnit :: Parser Term
-parseUnit = Parser $ \input -> do
-  (input', _) <- runParser (parseString "()") input
-  return (input', TUnit)
+parseUnit =
+  Parser $ \input -> do
+    (input', _) <- runParser (parseString "()") input
+    return (input', TUnit)
 
 parseTBool :: Parser Term
-parseTBool = Parser $ \input -> do
-  (input', x) <- runParser (parseTrue <|> parseFalse) input
-  return (input', TBool x)
+parseTBool =
+  trace "tbool" $
+  Parser $ \input -> do
+    (input', x) <- runParser (parseTrue <|> parseFalse) input
+    return (input', TBool x)
 
 parseVar :: Parser Term
-parseVar = Parser $ \input -> do
-  (input', x) <- runParser pVar input
-  return (input', Var [x])
+parseVar =
+  Parser $ \input -> do
+    (input', x) <- runParser pVar input
+    return (input', Var [x])
 
 parseLambda :: Parser Term
-parseLambda = Parser $ \input -> do
-  (input1, _) <- runParser pLpar input
-  (input2, _) <- runParser pLamb input1
-  (input3, v) <- runParser pVar input2
-  (input4, _) <- runParser pDot input3
-  (input5, body) <- runParser parseTerm input4
-  (input6, _) <- runParser pRpar input5
-  return (input6, Lamb [v] body)
+parseLambda =
+  Parser $ \input -> do
+    (input1, _) <- runParser pLpar input
+    (input2, _) <- runParser pLamb input1
+    (input3, v) <- runParser pVar input2
+    (input4, _) <- runParser pDot input3
+    (input5, body) <- runParser parseTerm input4
+    (input6, _) <- runParser pRpar input5
+    return (input6, Lamb [v] body)
 
 parse :: String -> Term
-parse input = case runParser parseTerm input of
-  Just (input', t) -> if "" == input'
-    then t 
-    else error $ "Doesnt consume all input >" ++ input' ++ "<"
-  _ -> error "Parse error"
+parse input =
+  case runParser parseTerm input of
+    Just (input', t) ->
+      if "" == input'
+        then t
+        else error $ "Doesnt consume all input >" ++ input' ++ "<"
+    _ -> error "Parse error"
