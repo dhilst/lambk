@@ -53,19 +53,19 @@ many1 p =
         Just (inputNext, xNext) -> helper p inputNext (xNext : x)
         Nothing -> Just (input, x)
 
-chain1l :: Parser a -> Parser op -> Parser a
-chain1l p op = Parser $ \input -> do undefined
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 p op = undefined
 
-parseChar :: Char -> Parser Char
-parseChar x =
+char :: Char -> Parser Char
+char x =
   Parser $ \case
     (y:ys)
       | x == y -> Just (ys, x)
     _ -> Nothing
 
-parseString :: String -> Parser String
-parseString s =
-  let x = map parseChar s
+string :: String -> Parser String
+string s =
+  let x = map char s
    in sequenceA x
 
 first :: [Parser a] -> Parser a
@@ -79,25 +79,25 @@ first parsers =
       _ -> Nothing
 
 oneOfChar :: [Char] -> Parser Char
-oneOfChar options = first (map parseChar options)
+oneOfChar options = first (map char options)
 
-lpar = parseChar '('
+lpar = char '('
 
-rpar = parseChar ')'
+rpar = char ')'
 
-lambChar = parseChar 'λ'
+lambChar = char 'λ'
 
-dot = parseChar '.'
+dot = char '.'
 
 letter = oneOfChar ['x' .. 'z']
 
 spaces :: Parser String
-spaces = many1 $ parseChar ' '
+spaces = many1 $ char ' '
 
 boolConst :: String -> Bool -> Parser Bool
 boolConst s v =
   Parser $ \input -> do
-    (input', x) <- runParser (parseString s) input
+    (input', x) <- runParser (string s) input
     return (input', v)
 
 true :: Parser Bool
@@ -109,13 +109,13 @@ false = boolConst "false" False
 and :: Parser BoolOp
 and =
   Parser $ \input -> do
-    (input1, _) <- runParser (parseString "&&") input
+    (input1, _) <- runParser (string "&&") input
     return (input1, And)
 
 or :: Parser BoolOp
 or =
   Parser $ \input -> do
-    (input1, _) <- runParser (parseString "||") input
+    (input1, _) <- runParser (string "||") input
     return (input1, Or)
 
 boolOp :: Parser BoolOp
@@ -138,7 +138,19 @@ boolOp = trace "bool op" $ and <|> or
 -- appl = ???? left recursion ??? <|> var
 -- var = word
 term :: Parser Term
-term = lambda <|> app <|> atom
+term = lambda <|> infixExpr <|> app <|> atom
+
+infixExpr :: Parser Term
+infixExpr = boolExpr
+
+-- bConst = "true" | "false"
+-- bOp = "or" | "and"
+-- boolExpr = bConst | bConst bOp boolExpr
+boolExpr :: Parser Term
+boolExpr = chainl1 term op
+  where op =
+          TAnd <$ string "&&" <|>
+          TOr <$ string "||"
 
 atom = var <|> unit <|> bool
 
@@ -155,7 +167,7 @@ app =
 unit :: Parser Term
 unit =
   Parser $ \input -> do
-    (input', _) <- runParser (parseString "()") input
+    (input', _) <- runParser (string "()") input
     return (input', TUnit)
 
 bool :: Parser Term

@@ -14,7 +14,8 @@ data Term
   | App Term Term
   | TBool Bool
   | TUnit
-  | TBoolOp Term BoolOp Term
+  | TAnd Term Term
+  | TOr Term Term
   deriving (Eq)
 
 data BoolOp
@@ -31,7 +32,8 @@ instance Show Term where
       then "true"
       else "false"
   show TUnit = "()"
-  show (TBoolOp a op b) = show a ++ " " ++ show op ++ " " ++ show b
+  show (TAnd a b) = show a ++ " && " ++ show b
+  show (TOr a b) = show a ++ " || " ++ show b
 
 instance Show BoolOp where
   show And = "&&"
