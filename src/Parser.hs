@@ -6,6 +6,7 @@ import Control.Applicative
 import Control.Monad
 import Debug.Trace
 import Lamb
+import Prelude hiding (and, or)
 
 {-# ANN module ("hlint: ignore Use <$>") #-}
 
@@ -39,6 +40,22 @@ instance Monad Parser where
       (input', x) <- p input
       runParser (f x) input'
 
+many1 :: Parser a -> Parser [a]
+many1 p =
+  Parser $ \input -> do
+    (input1, x1) <- runParser p input
+    (input2, x2) <- helper p input1 [x1]
+    return (input2, reverse x2)
+  where
+    helper :: Parser a -> String -> [a] -> Maybe (String, [a])
+    helper p input x = do
+      case runParser p input of
+        Just (inputNext, xNext) -> helper p inputNext (xNext : x)
+        Nothing -> Just (input, x)
+
+chain1l :: Parser a -> Parser op -> Parser a
+chain1l p op = Parser $ \input -> do undefined
+
 parseChar :: Char -> Parser Char
 parseChar x =
   Parser $ \case
@@ -51,115 +68,123 @@ parseString s =
   let x = map parseChar s
    in sequenceA x
 
-firstOf :: [Parser a] -> Parser a
-firstOf parsers =
+first :: [Parser a] -> Parser a
+first parsers =
   Parser $ \input ->
     case parsers of
       (p:ps) ->
         case runParser p input of
           Just x -> Just x
-          Nothing -> runParser (firstOf ps) input
+          Nothing -> runParser (first ps) input
       _ -> Nothing
 
 oneOfChar :: [Char] -> Parser Char
-oneOfChar options = firstOf (map parseChar options)
+oneOfChar options = first (map parseChar options)
 
-pLpar = parseChar '('
+lpar = parseChar '('
 
-pRpar = parseChar ')'
+rpar = parseChar ')'
 
-pLamb = parseChar 'λ'
+lambChar = parseChar 'λ'
 
-pDot = parseChar '.'
+dot = parseChar '.'
 
-pVar = oneOfChar ['x' .. 'z']
+letter = oneOfChar ['x' .. 'z']
 
-pWs = parseChar ' '
+spaces :: Parser String
+spaces = many1 $ parseChar ' '
 
-parseBool :: String -> Bool -> Parser Bool
-parseBool s v =
+boolConst :: String -> Bool -> Parser Bool
+boolConst s v =
   Parser $ \input -> do
     (input', x) <- runParser (parseString s) input
     return (input', v)
 
-parseTrue :: Parser Bool
-parseTrue = parseBool "true" True
+true :: Parser Bool
+true = boolConst "true" True
 
-parseFalse :: Parser Bool
-parseFalse = parseBool "false" False
+false :: Parser Bool
+false = boolConst "false" False
 
-parseAnd :: Parser BoolOp
-parseAnd =
+and :: Parser BoolOp
+and =
   Parser $ \input -> do
     (input1, _) <- runParser (parseString "&&") input
     return (input1, And)
 
-parseOr =
+or :: Parser BoolOp
+or =
   Parser $ \input -> do
     (input1, _) <- runParser (parseString "||") input
     return (input1, Or)
 
-parseBoolOp :: Parser BoolOp
-parseBoolOp = trace "bool op" $ parseAnd <|> parseOr
+boolOp :: Parser BoolOp
+boolOp = trace "bool op" $ and <|> or
 
-parseBoolBinOp :: Parser Term
-parseBoolBinOp =
-  trace
-    "foo"
-    (Parser $ \input -> do
-       (input1, x1) <- runParser parseTerm input
-       (input2, x2) <- runParser parseBoolOp input1
-       (input3, x3) <- runParser parseTerm input2
-       return (input3, TBoolOp x1 x2 x3))
+-- start  : let
+-- let    : "let" ID "=" let "in" let | lamb
+-- lamb   : "λ" lvar [":" type] "." let | appl
+-- appl   : appl var | var
+-- var    : VAR
+-- var    : "(" lamb ")" | ID -> id_ | VAR -> var
+-- type   : (VAR | TCONST) "->" type | "'" VAR -> tvar | TCONST -> tconst
+-- VAR     : /[a-z]/
+-- ID      : /[a-z_][a-zA-Z_']*/
+-- TCONST  : /(int|bool|str)/
+--
+-- start :: Parser Term
+-- start = lamb
+-- lamb = undefined <|> appl
+-- appl = ???? left recursion ??? <|> var
+-- var = word
+term :: Parser Term
+term = lambda <|> app <|> atom
 
-parseTerm :: Parser Term
-parseTerm =
-  parseVar <|> parseUnit <|> parseBoolBinOp <|> parseTBool <|> parseLambda <|>
-  parseApp
+atom = var <|> unit <|> bool
 
-parseApp :: Parser Term
-parseApp =
+app :: Parser Term
+app =
   Parser $ \input -> do
-    (input1, _) <- runParser pLpar input
-    (input2, t1) <- runParser parseTerm input1
-    (input3, _) <- runParser pWs input2
-    (input4, t2) <- runParser parseTerm input3
-    (input5, _) <- runParser pRpar input4
+    (input1, _) <- runParser lpar input
+    (input2, t1) <- runParser term input1
+    (input3, _) <- runParser spaces input2
+    (input4, t2) <- runParser term input3
+    (input5, _) <- runParser rpar input4
     return (input5, App t1 t2)
 
-parseUnit :: Parser Term
-parseUnit =
+unit :: Parser Term
+unit =
   Parser $ \input -> do
     (input', _) <- runParser (parseString "()") input
     return (input', TUnit)
 
-parseTBool :: Parser Term
-parseTBool =
+bool :: Parser Term
+bool =
   trace "tbool" $
   Parser $ \input -> do
-    (input', x) <- runParser (parseTrue <|> parseFalse) input
+    (input', x) <- runParser (true <|> false) input
     return (input', TBool x)
 
-parseVar :: Parser Term
-parseVar =
+var :: Parser Term
+var =
   Parser $ \input -> do
-    (input', x) <- runParser pVar input
+    (input', x) <- runParser letter input
     return (input', Var [x])
 
-parseLambda :: Parser Term
-parseLambda =
+lambda :: Parser Term
+lambda =
   Parser $ \input -> do
-    (input1, _) <- runParser pLpar input
-    (input2, _) <- runParser pLamb input1
-    (input3, v) <- runParser pVar input2
-    (input4, _) <- runParser pDot input3
-    (input5, body) <- runParser parseTerm input4
-    (input6, _) <- runParser pRpar input5
+    (input1, _) <- runParser lpar input
+    (input2, _) <- runParser lambChar input1
+    (input3, v) <- runParser letter input2
+    (input4, _) <- runParser dot input3
+    (input5, body) <- runParser term input4
+    (input6, _) <- runParser rpar input5
     return (input6, Lamb [v] body)
 
 parse :: String -> Term
 parse input =
-  case runParser parseTerm input of
+  case runParser term input of
     Just (input', t) ->
       if "" == input'
         then t
