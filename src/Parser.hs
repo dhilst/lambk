@@ -40,6 +40,7 @@ instance Monad Parser where
       (input', x) <- p input
       runParser (f x) input'
 
+-- Run one or more
 many1 :: Parser a -> Parser [a]
 many1 p =
   Parser $ \input -> do
@@ -53,8 +54,21 @@ many1 p =
         Just (inputNext, xNext) -> helper p inputNext (xNext : x)
         Nothing -> Just (input, x)
 
-chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
-chainl1 p op = undefined
+empty :: Parser ()
+empty = Parser $ \input -> Just (input, ())
+
+-- Remove left recursion
+-- A | A op B op C -> A | (A op B) op C
+chainl1 :: Monoid a => Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 p op =
+  Parser $ \input -> do
+    (input1, x1) <- runParser p input
+    case rest input1 of
+      Just (input2, x2) -> Just (input2, x1 <> x2)
+      Nothing -> Just (input1, x1)
+  where
+    rest :: String -> Maybe (String, a)
+    rest input = Nothing
 
 char :: Char -> Parser Char
 char x =
@@ -138,19 +152,38 @@ boolOp = trace "bool op" $ and <|> or
 -- appl = ???? left recursion ??? <|> var
 -- var = word
 term :: Parser Term
-term = lambda <|> infixExpr <|> app <|> atom
+term = lambda <|> boolExpr <|> app <|> atom
 
-infixExpr :: Parser Term
-infixExpr = boolExpr
-
--- bConst = "true" | "false"
--- bOp = "or" | "and"
--- boolExpr = bConst | bConst bOp boolExpr
+-- Left recursion elimination
+-- A -> A a | b
+--
+-- A -> b A'
+-- A' -> empty | a A
+--
+-- E -> E + T | T
+--
+-- ==>
+--
+-- E -> T E'
+-- E -> empty | + T E'
+--
+-- boolExpr -> term op atom 
+--
+-- boolExpr -> bool boolExpr'
+-- boolExpr' -> op bool boolExpr' | empty
 boolExpr :: Parser Term
-boolExpr = chainl1 term op
-  where op =
-          TAnd <$ string "&&" <|>
-          TOr <$ string "||"
+boolExpr =
+  Parser $ \input -> do
+    (input1, x1) <- runParser bool input
+    case boolExpr' input1 of
+      Just (input2, (op, x2)) -> return (input2, TBoolExpr op x1 x2)
+      Nothing -> return (input1, x1)
+  where
+    boolExpr' :: String -> Maybe (String, (BoolOp, Term))
+    boolExpr' input = do
+      (input2, x2) <- runParser boolOp input
+      (input3, x3) <- runParser boolExpr input2
+      return (input3, (x2, x3))
 
 atom = var <|> unit <|> bool
 
