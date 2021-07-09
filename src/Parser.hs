@@ -54,9 +54,6 @@ many1 p =
         Just (inputNext, xNext) -> helper p inputNext (xNext : x)
         Nothing -> Just (input, x)
 
-empty :: Parser ()
-empty = Parser $ \input -> Just (input, ())
-
 -- Remove left recursion
 -- A | A op B op C -> A | (A op B) op C
 chainl1 :: Monoid a => Parser a -> Parser (a -> a -> a) -> Parser a
@@ -105,8 +102,11 @@ dot = char '.'
 
 letter = oneOfChar ['x' .. 'z']
 
-spaces :: Parser String
-spaces = many1 $ char ' '
+emptyWord :: Parser ()
+emptyWord = Parser $ \input -> Just (input, ())
+
+spaces :: Parser ()
+spaces = () <$ many1 (char ' ') <|> emptyWord
 
 boolConst :: String -> Bool -> Parser Bool
 boolConst s v =
@@ -174,15 +174,15 @@ term = lambda <|> boolExpr <|> app <|> atom
 boolExpr :: Parser Term
 boolExpr =
   Parser $ \input -> do
-    (input1, x1) <- runParser bool input
+    (input1, x1) <- runParser (spaces *> bool) input
     case boolExpr' input1 of
       Just (input2, (op, x2)) -> return (input2, TBoolExpr op x1 x2)
       Nothing -> return (input1, x1)
   where
     boolExpr' :: String -> Maybe (String, (BoolOp, Term))
     boolExpr' input = do
-      (input2, x2) <- runParser boolOp input
-      (input3, x3) <- runParser boolExpr input2
+      (input2, x2) <- runParser (spaces *> boolOp) input
+      (input3, x3) <- runParser (spaces *> boolExpr) input2
       return (input3, (x2, x3))
 
 atom = var <|> unit <|> bool
