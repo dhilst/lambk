@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 module Lamb where
 
 import Control.Monad.Reader
@@ -16,6 +17,24 @@ data Term
   | TUnit
   | TBoolExpr BoolOp Term Term
   deriving (Eq)
+
+
+data LType a b = Arrow a b | TVar a | Unit | Bool
+
+
+data Term' t a where
+  Var' :: String -> Term' t a
+  Lamb' :: String -> Term' t a
+  App' :: Term' t a -> Term' t a
+  TBool' :: Bool -> Term' Bool a
+  TUnit' :: () -> Term' () a
+  TBoolExpr' :: BoolOp -> Term' Bool a  -> Term' Bool a -> Term' Bool a
+
+-- ((λx.x) 1) || B
+-- A -> bool
+-- B -> bool
+-- bool || bool -> bool
+
 
 data BoolOp
   = And
